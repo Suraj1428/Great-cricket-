@@ -367,4 +367,238 @@
         }
 
         function updatePrevOverSummary() {
-            const currentTeam = match.currentInnings === 1 ? match.battingFirst : (match.
+            const currentTeam = match.currentInnings === 1 ? match.battingFirst : (match.battingFirst === match.team1 ? match.team2 : match.team1);
+            const currentOverStartLegal = Math.max(0, currentTeam.legalBalls - (currentTeam.legalBalls % 6 || 6));
+            const prevOverEndLegal = currentOverStartLegal;
+            const prevOverStartLegal = Math.max(0, prevOverEndLegal - 6);
+
+            let legalBallCount = 0;
+            let startIndex = 0;
+            let endIndex = 0;
+            for (let i = 0; i < currentTeam.ballByBall.length; i++) {
+                const ball = currentTeam.ballByBall[i];
+                if (!ball.startsWith("wd") && !ball.startsWith("nb")) {
+                    legalBallCount++;
+                }
+                if (legalBallCount === prevOverStartLegal + 1) {
+                    startIndex = i;
+                }
+                if (legalBallCount === prevOverEndLegal) {
+                    endIndex = i + 1;
+                    break;
+                }
+            }
+
+            const prevOverBalls = currentTeam.ballByBall.slice(startIndex, endIndex);
+            document.getElementById("prevOverSummary").textContent = prevOverBalls.length > 0 ? `Previous Over: ${prevOverBalls.join(", ")}` : "Previous Over: None";
+        }
+
+        function checkEndOfInnings() {
+            const currentTeam = match.currentInnings === 1 ? match.battingFirst : (match.battingFirst === match.team1 ? match.team2 : match.team1);
+            const target = match.currentInnings === 2 ? match.battingFirst.score + 1 : null;
+
+            if (currentTeam.wickets >= 10 || currentTeam.overs >= match.totalOvers || (match.currentInnings === 2 && currentTeam.score >= target)) {
+                endInnings();
+            }
+        }
+
+        async function saveMatchToBackend() {
+            // Assign player stats before saving
+            assignPlayerStats(match.team1);
+            assignPlayerStats(match.team2);
+
+            const matchData = {
+                team1: {
+                    name: match.team1.name,
+                    score: match.team1.score,
+                    wickets: match.team1.wickets,
+                    overs: match.team1.overs,
+                    legalBalls: match.team1.legalBalls,
+                    ballByBall: match.team1.ballByBall,
+                    wides: match.team1.wides,
+                    noBalls: match.team1.noBalls,
+                    players: match.team1.players
+                },
+                team2: {
+                    name: match.team2.name,
+                    score: match.team2.score,
+                    wickets: match.team2.wickets,
+                    overs: match.team2.overs,
+                    legalBalls: match.team2.legalBalls,
+                    ballByBall: match.team2.ballByBall,
+                    wides: match.team2.wides,
+                    noBalls: match.team2.noBalls,
+                    players: match.team2.players
+                },
+                totalOvers: match.totalOvers,
+                tossWinner: match.tossWinner,
+                tossChoice: match.tossChoice,
+                result: getMatchResult()
+            };
+
+            try {
+                const response = await fetch('http://localhost:3000/api/matches', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(matchData)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    console.log('Match saved:', result);
+                } else {
+                    console.error('Failed to save match:', result);
+                }
+            } catch (error) {
+                console.error('Error saving match:', error);
+            }
+        }
+
+        async function endInnings() {
+            if (match.currentInnings === 1) {
+                match.currentInnings = 2;
+                match.currentOverWides = 0;
+                match.currentOverNoBalls = 0;
+                updateExtrasSummary();
+                document.getElementById("scoringSection").classList.remove("hidden");
+                updateScoreDisplay();
+                updatePrevOverSummary();
+            } else {
+                let winner = null;
+                const secondBattingTeam = match.battingFirst === match.team1 ? match.team2 : match.team1;
+                if (secondBattingTeam.score >= match.battingFirst.score + 1) {
+                    winner = secondBattingTeam.name;
+                } else if (secondBattingTeam.wickets >= 10 || secondBattingTeam.overs >= match.totalOvers) {
+                    winner = match.battingFirst.name;
+                }
+                if (winner) {
+                    alert(`Congratulations, ${winner}! You have won the match! 🎉`);
+                }
+                await saveMatchToBackend();
+                showMatchSummary();
+            }
+        }
+
+        function showMatchSummary() {
+            document.getElementById("scoringSection").classList.add("hidden");
+            document.getElementById("matchSummary").classList.remove("hidden");
+
+            const cheerSound = document.getElementById("cheerSound");
+            cheerSound.play().catch(error => {
+                console.log("Audio playback failed:", error);
+            });
+
+            const team1Batters = match.team1.players.filter(p => p.runs > 0);
+            const team2Batters = match.team2.players.filter(p => p.runs > 0);
+            const team1Bowlers = match.team1.players.filter(p => p.wickets > 0);
+            const team2Bowlers = match.team2.players.filter(p => p.wickets > 0);
+
+            const summaryContent = `
+                <p><strong>Toss:</strong> ${match.tossWinner === "team1" ? match.team1.name : match.team2.name} won the toss and chose to ${match.tossChoice}</p>
+                <p><strong>${match.team1.name}:</strong> ${match.team1.score}/${match.team1.wickets} in ${match.team1.overs.toFixed(1)} overs</p>
+                <p>Ball-by-Ball: ${match.team1.ballByBall.join(", ")}</p>
+                <p>Total Wides: ${match.team1.wides} | Total No Balls: ${match.team1.noBalls}</p>
+                <p><strong>Batting:</strong> ${team1Batters.map(p => `${p.name}: ${p.runs} runs`).join(", ")}</p>
+                <p><strong>Bowling:</strong> ${team1Bowlers.map(p => `${p.name}: ${p.wickets} wickets`).join(", ")}</p>
+                <p><strong>${match.team2.name}:</strong> ${match.team2.score}/${match.team2.wickets} in ${match.team2.overs.toFixed(1)} overs</p>
+                <p>Ball-by-Ball: ${match.team2.ballByBall.join(", ")}</p>
+                <p>Total Wides: ${match.team2.wides} | Total No Balls: ${match.team2.noBalls}</p>
+                <p><strong>Batting:</strong> ${team2Batters.map(p => `${p.name}: ${p.runs} runs`).join(", ")}</p>
+                <p><strong>Bowling:</strong> ${team2Bowlers.map(p => `${p.name}: ${p.wickets} wickets`).join(", ")}</p>
+                <p><strong>Result:</strong> ${getMatchResult()}</p>
+            `;
+            document.getElementById("summaryContent").innerHTML = summaryContent;
+        }
+
+        async function showMatchHistory() {
+            document.getElementById("matchSetup").classList.add("hidden");
+            document.getElementById("tossSection").classList.add("hidden");
+            document.getElementById("scoringSection").classList.add("hidden");
+            document.getElementById("matchSummary").classList.add("hidden");
+            document.getElementById("matchHistory").classList.remove("hidden");
+
+            try {
+                const response = await fetch('http://localhost:3000/api/matches');
+                const matches = await response.json();
+                let historyContent = '';
+                if (matches.length === 0) {
+                    historyContent = '<p>No match history available.</p>';
+                } else {
+                    matches.forEach((m, index) => {
+                        const team1Batters = m.team1.players.filter(p => p.runs > 0);
+                        const team2Batters = m.team2.players.filter(p => p.runs > 0);
+                        const team1Bowlers = m.team1.players.filter(p => p.wickets > 0);
+                        const team2Bowlers = m.team2.players.filter(p => p.wickets > 0);
+
+                        historyContent += `
+                            <div class="mb-4 p-4 border rounded">
+                                <p><strong>Match ${index + 1} (${new Date(m.matchDate).toLocaleString()}):</strong></p>
+                                <p><strong>Toss:</strong> ${m.tossWinner === "team1" ? m.team1.name : m.team2.name} won the toss and chose to ${m.tossChoice}</p>
+                                <p><strong>${m.team1.name}:</strong> ${m.team1.score}/${m.team1.wickets} in ${m.team1.overs.toFixed(1)} overs</p>
+                                <p>Ball-by-Ball: ${m.team1.ballByBall.join(", ")}</p>
+                                <p>Total Wides: ${m.team1.wides} | Total No Balls: ${m.team1.noBalls}</p>
+                                <p><strong>Batting:</strong> ${team1Batters.map(p => `${p.name}: ${p.runs} runs`).join(", ")}</p>
+                                <p><strong>Bowling:</strong> ${team1Bowlers.map(p => `${p.name}: ${p.wickets} wickets`).join(", ")}</p>
+                                <p><strong>${m.team2.name}:</strong> ${m.team2.score}/${m.team2.wickets} in ${m.team2.overs.toFixed(1)} overs</p>
+                                <p>Ball-by-Ball: ${m.team2.ballByBall.join(", ")}</p>
+                                <p>Total Wides: ${m.team2.wides} | Total No Balls: ${m.team2.noBalls}</p>
+                                <p><strong>Batting:</strong> ${team2Batters.map(p => `${p.name}: ${p.runs} runs`).join(", ")}</p>
+                                <p><strong>Bowling:</strong> ${team2Bowlers.map(p => `${p.name}: ${p.wickets} wickets`).join(", ")}</p>
+                                <p><strong>Result:</strong> ${m.result}</p>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById("historyContent").innerHTML = historyContent;
+            } catch (error) {
+                document.getElementById("historyContent").innerHTML = '<p>Error loading match history.</p>';
+                console.error('Error fetching match history:', error);
+            }
+        }
+
+        function getMatchResult() {
+            const secondBattingTeam = match.battingFirst === match.team1 ? match.team2 : match.team1;
+            if (match.battingFirst.score > secondBattingTeam.score) {
+                return `${match.battingFirst.name} wins by ${match.battingFirst.score - secondBattingTeam.score} runs`;
+            } else if (secondBattingTeam.score >= match.battingFirst.score + 1) {
+                return `${secondBattingTeam.name} wins by ${10 - secondBattingTeam.wickets} wickets`;
+            } else {
+                return "Match tied";
+            }
+        }
+
+        function resetMatch() {
+            match = {
+                team1: { name: "", score: 0, wickets: 0, overs: 0, legalBalls: 0, ballByBall: [], wides: 0, noBalls: 0, players: [] },
+                team2: { name: "", score: 0, wickets: 0, overs: 0, legalBalls: 0, ballByBall: [], wides: 0, noBalls: 0, players: [] },
+                totalOvers: 0,
+                currentInnings: 1,
+                currentBall: "",
+                tossWinner: null,
+                tossChoice: null,
+                battingFirst: null,
+                currentOverWides: 0,
+                currentOverNoBalls: 0
+            };
+            document.getElementById("matchSetup").classList.remove("hidden");
+            document.getElementById("tossSection").classList.add("hidden");
+            document.getElementById("scoringSection").classList.add("hidden");
+            document.getElementById("matchSummary").classList.add("hidden");
+            document.getElementById("matchHistory").classList.add("hidden");
+            document.getElementById("team1").value = "Team A";
+            document.getElementById("team2").value = "Team B";
+            document.getElementById("totalOvers").value = "20";
+            document.getElementById("prevOverSummary").textContent = "Previous Over: None";
+            document.getElementById("extrasSummary").textContent = "Wides: 0 | No Balls: 0";
+            document.getElementById("battingTeam").textContent = "";
+            document.getElementById("targetBalls").textContent = "";
+        }
+
+        document.getElementById("startMatch").addEventListener("click", startMatch);
+        document.getElementById("confirmToss").addEventListener("click", confirmToss);
+        document.getElementById("endInnings").addEventListener("click", endInnings);
+        document.getElementById("newMatch").addEventListener("click", resetMatch);
+        document.getElementById("viewHistory").addEventListener("click", showMatchHistory);
+        document.getElementById("backToSetup").addEventListener("click", resetMatch);
+    </script>
+</body>
+</html>
