@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Your Tournament - Premium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="font-sans bg-cover bg-center bg-no-repeat" style="background-image: url('https://images.unsplash.com/photo-1587282022398-08293079ed11?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80'); background-color: rgba(0,0,0,0.5); background-blend-mode: overlay;">
+    <div class="container mx-auto p-4 min-h-screen">
+        <h1 class="text-4xl font-bold text-center mb-8 text-white drop-shadow-lg">Access Your Tournament - Premium</h1>
+
+        <!-- Back to Scoring App -->
+        <div class="mb-6">
+            <a href="index.html" class="text-white underline hover:text-blue-300">Back to Scoring App</a>
+        </div>
+
+        <!-- Tournament Setup -->
+        <div id="tournamentSetup" class="bg-white bg-opacity-90 p-6 rounded-lg shadow-xl mb-6 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1623071948634-965528cfccfc?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80');">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Tournament Setup</h2>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700">Enter Team Names (4-10 teams, one per line)</label>
+                <textarea id="teamList" class="mt-1 p-2 w-full border rounded bg-white bg-opacity-80" rows="5" placeholder="Team A\nTeam B\nTeam C\nTeam D"></textarea>
+            </div>
+            <button id="scheduleMatches" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Schedule Matches</button>
+        </div>
+
+        <!-- Match Schedule -->
+        <div id="matchSchedule" class="hidden bg-white bg-opacity-90 p-6 rounded-lg shadow-xl mb-6 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1623071948634-965528cfccfc?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80');">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Match Schedule</h2>
+            <div id="scheduleList" class="text-gray-700"></div>
+        </div>
+
+        <!-- Points Table -->
+        <div id="pointsTableSection" class="hidden bg-white bg-opacity-90 p-6 rounded-lg shadow-xl mb-6 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1623071948634-965528cfccfc?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80');">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Points Table</h2>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="p-2 border">Team</th>
+                        <th class="p-2 border">Played</th>
+                        <th class="p-2 border">Won</th>
+                        <th class="p-2 border">Lost</th>
+                        <th class="p-2 border">Tied</th>
+                        <th class="p-2 border">Points</th>
+                        <th class="p-2 border">NRR</th>
+                    </tr>
+                </thead>
+                <tbody id="pointsTableBody" class="text-gray-700"></tbody>
+            </table>
+        </div>
+
+        <!-- Top Scorer and Best Bowler -->
+        <div id="statsSection" class="hidden bg-white bg-opacity-90 p-6 rounded-lg shadow-xl mb-6 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1623071948634-965528cfccfc?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80');">
+            <h2 class="text-xl font-semibold mb-4 text-gray-800">Tournament Stats</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800">Top Scorer</h3>
+                    <p id="topScorer" class="text-gray-700">No data yet.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-medium text-gray-800">Best Bowler</h3>
+                    <p id="bestBowler" class="text-gray-700">No data yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let tournament = {
+            teams: [],
+            matches: [],
+            pointsTable: [],
+            players: []
+        };
+
+        function scheduleMatches() {
+            const teamList = document.getElementById("teamList").value.trim().split("\n").map(t => t.trim()).filter(t => t);
+            if (teamList.length < 4 || teamList.length > 10) {
+                alert("Please enter between 4 and 10 teams.");
+                return;
+            }
+
+            tournament.teams = teamList;
+            tournament.pointsTable = teamList.map(team => ({
+                name: team,
+                played: 0,
+                won: 0,
+                lost: 0,
+                tied: 0,
+                points: 0,
+                runsScored: 0,
+                oversFaced: 0,
+                runsConceded: 0,
+                oversBowled: 0,
+                nrr: 0
+            }));
+            tournament.matches = [];
+            tournament.players = [];
+
+            for (let i = 0; i < teamList.length; i++) {
+                for (let j = i + 1; j < teamList.length; j++) {
+                    tournament.matches.push({
+                        team1: teamList[i],
+                        team2: teamList[j],
+                        team1Score: null,
+                        team1Wickets: null,
+                        team2Score: null,
+                        team2Wickets: null,
+                        team1Overs: 0,
+                        team2Overs: 0
+                    });
+                }
+            }
+
+            tournament.matches.sort(() => Math.random() - 0.5);
+
+            const scheduleList = document.getElementById("scheduleList");
+            let html = "";
+            tournament.matches.forEach((match, index) => {
+                html += `
+                    <div class="mb-4 p-2 border rounded">
+                        <p class="font-semibold">Match ${index + 1}: ${match.team1} vs ${match.team2}</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                            <div>
+                                <label class="text-sm">${match.team1} Score:</label>
+                                <input type="number" id="score1_${index}" class="p-1 border rounded w-20" placeholder="Runs" min="0">
+                                <input type="number" id="wickets1_${index}" class="p-1 border rounded w-20" placeholder="Wickets" min="0" max="10">
+                                <input type="number" id="overs1_${index}" class="p-1 border rounded w-20" placeholder="Overs" min="0" max="20" step="0.1">
+                            </div>
+                            <div>
+                                <label class="text-sm">${match.team2} Score:</label>
+                                <input type="number" id="score2_${index}" class="p-1 border rounded w-20" placeholder="Runs" min="0">
+                                <input type="number" id="wickets2_${index}" class="p-1 border rounded w-20" placeholder="Wickets" min="0" max="10">
+                                <input type="number" id="overs2_${index}" class="p-1 border rounded w-20" placeholder="Overs" min="0" max="20" step="0.1">
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label class="text-sm">Top Scorer (Name, Runs):</label>
+                            <input type="text" id="topScorerName_${index}" class="p-1 border rounded" placeholder="Player Name">
+                            <input type="number" id="topScorerRuns_${index}" class="p-1 border rounded w-20" placeholder="Runs" min="0">
+                            <label class="text-sm ml-2">Team:</label>
+                            <select id="topScorerTeam_${index}" class="p-1 border rounded">
+                                <option value="${match.team1}">${match.team1}</option>
+                                <option value="${match.team2}">${match.team2}</option>
+                            </select>
+                        </div>
+                        <div class="mt-2">
+                            <label class="text-sm">Best Bowler (Name, Wickets):</label>
+                            <input type="text" id="bestBowlerName_${index}" class="p-1 border rounded" placeholder="Player Name">
+                            <input type="number" id="bestBowlerWickets_${index}" class="p-1 border rounded w-20" placeholder="Wickets" min="0">
+                            <label class="text-sm ml-2">Team:</label>
+                            <select id="bestBowlerTeam_${index}" class="p-1 border rounded">
+                                <option value="${match.team1}">${match.team1}</option>
+                                <option value="${match.team2}">${match.team2}</option>
+                            </select>
+                        </div>
+                        <button onclick="updateMatch(${index})" class="mt-2 bg-green-600 text-white p-1 rounded hover:bg-green-700">Update Result</button>
+                    </div>
+                `;
+            });
+            scheduleList.innerHTML = html;
+
+            document.getElementById("tournamentSetup").classList.add("hidden");
+            document.getElementById("matchSchedule").classList.remove("hidden");
+            document.getElementById("pointsTableSection").classList.remove("hidden");
+            document.getElementById("statsSection").classList.remove("hidden");
+            updatePointsTable();
+        }
+
+        function updateMatch(index) {
+            const match = tournament.matches[index];
+            match.team1Score = parseInt(document.getElementById(`score1_${index}`).value) || 0;
+            match.team1Wickets = parseInt(document.getElementById(`wickets1_${index}`).value) || 0;
+            match.team2Score = parseInt(document.getElementById(`score2_${index}`).value) || 0;
+            match.team2Wickets = parseInt(document.getElementById(`wickets2_${index}`).value) || 0;
+            match.team1Overs = parseFloat(document.getElementById(`overs1_${index}`).value) || 0;
+            match.team2Overs = parseFloat(document.getElementById(`overs2_${index}`).value) || 0;
+
+            const team1Entry = tournament.pointsTable.find(t => t.name === match.team1);
+            const team2Entry = tournament.pointsTable.find(t => t.name === match.team2);
+
+            if (match.team1Score !== null && match.team2Score !== null) {
+                team1Entry.played++;
+                team2Entry.played++;
+
+                team1Entry.runsScored += match.team1Score;
+                team1Entry.oversFaced += match.team1Overs;
+                team1Entry.runsConceded += match.team2Score;
+                team1Entry.oversBowled += match.team2Overs;
+
+                team2Entry.runsScored += match.team2Score;
+                team2Entry.oversFaced += match.team2Overs;
+                team2Entry.runsConceded += match.team1Score;
+                team2Entry.oversBowled += match.team1Overs;
+
+                if (match.team1Score > match.team2Score) {
+                    team1Entry.won++;
+                    team2Entry.lost++;
+                    team1Entry.points += 2;
+                } else if (match.team2Score > match.team1Score) {
+                    team2Entry.won++;
+                    team1Entry.lost++;
+                    team2Entry.points += 2;
+                } else {
+                    team1Entry.tied++;
+                    team2Entry.tied++;
+                    team1Entry.points++;
+                    team2Entry.points++;
+                }
+
+                team1Entry.nrr = ((team1Entry.runsScored / team1Entry.oversFaced) - (team1Entry.runsConceded / team1Entry.oversBowled)).toFixed(3);
+                team2Entry.nrr = ((team2Entry.runsScored / team2Entry.oversFaced) - (team2Entry.runsConceded / team2Entry.oversBowled)).toFixed(3);
+            }
+
+            const topScorerName = document.getElementById(`topScorerName_${index}`).value.trim();
+            const topScorerRuns = parseInt(document.getElementById(`topScorerRuns_${index}`).value) || 0;
+            const topScorerTeam = document.getElementById(`topScorerTeam_${index}`).value;
+
+            const bestBowlerName = document.getElementById(`bestBowlerName_${index}`).value.trim();
+            const bestBowlerWickets = parseInt(document.getElementById(`bestBowlerWickets_${index}`).value) || 0;
+            const bestBowlerTeam = document.getElementById(`bestBowlerTeam_${index}`).value;
+
+            if (topScorerName && topScorerRuns > 0) {
+                let player = tournament.players.find(p => p.name === topScorerName && p.team === topScorerTeam);
+                if (!player) {
+                    player = { name: topScorerName, team: topScorerTeam, runs: 0, wickets: 0 };
+                    tournament.players.push(player);
+                }
+                player.runs += topScorerRuns;
+            }
+
+            if (bestBowlerName && bestBowlerWickets > 0) {
+                let player = tournament.players.find(p => p.name === bestBowlerName && p.team === bestBowlerTeam);
+                if (!player) {
+                    player = { name: bestBowlerName, team: bestBowlerTeam, runs: 0, wickets: 0 };
+                    tournament.players.push(player);
+                }
+                player.wickets += bestBowlerWickets;
+            }
+
+            updatePointsTable();
+            updateStats();
+        }
+
+        function updatePointsTable() {
+            tournament.pointsTable.sort((a, b) => b.points - a.points || b.nrr - a.nrr);
+            const tbody = document.getElementById("pointsTableBody");
+            let html = "";
+            tournament.pointsTable.forEach(team => {
+                html += `
+                    <tr>
+                        <td class="p-2 border">${team.name}</td>
+                        <td class="p-2 border">${team.played}</td>
+                        <td class="p-2 border">${team.won}</td>
+                        <td class="p-2 border">${team.lost}</td>
+                        <td class="p-2 border">${team.tied}</td>
+                        <td class="p-2 border">${team.points}</td>
+                        <td class="p-2 border">${team.nrr || '0.000'}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function updateStats() {
+            const topScorer = tournament.players.reduce((max, player) => player.runs > (max.runs || 0) ? player : max, {});
+            document.getElementById("topScorer").textContent = topScorer.name ? `${topScorer.name} (${topScorer.team}) - ${topScorer.runs} runs` : "No data yet.";
+
+            const bestBowler = tournament.players.reduce((max, player) => player.wickets > (max.wickets || 0) ? player : max, {});
+            document.getElementById("bestBowler").textContent = bestBowler.name ? `${bestBowler.name} (${bestBowler.team}) - ${bestBowler.wickets} wickets` : "No data yet.";
+        }
+
+        document.getElementById("scheduleMatches").addEventListener("click", scheduleMatches);
+    </script>
+</body>
+</html>
